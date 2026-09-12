@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "A live, transient-simulation circuit board in React — DC/AC solver, capacitors, inductors, a scope, bendable wires, and node dragging.",
+  "description": "A circuit simulator built in React",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
