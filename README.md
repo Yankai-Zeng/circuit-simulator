@@ -1,73 +1,45 @@
-# CircuitBoard
+# circuit-simulator
 
-A live, continuously-running circuit simulator built in React. Not a one-shot
-DC solver — it re-solves the circuit every ~2ms of simulated time using
-modified nodal analysis, with backward-Euler companion models for
-capacitors and inductors, so charge curves, LC oscillation, and AC drive
-actually animate in real time.
+I built this because I wanted a circuit simulator that actually felt alive
+instead of just spitting out a static answer. Most simple simulators solve
+a circuit once and show you the result - a voltage, a current, done. This
+one keeps solving, a couple thousand times a second, so a capacitor
+actually charges up in front of you, an inductor's current actually ramps,
+an AC source actually oscillates. It's the same underlying math, modified
+nodal analysis with backward-Euler models for the capacitors and inductors,
+just run continuously instead of once.
 
-**Features**
+The parts are resistors, capacitors, inductors, LEDs, switches, DC
+batteries, AC sources, and ground. You wire them together on a grid, and
+it's solving the whole thing live the entire time you're building it, not
+just when you hit some "run" button.
 
-- Resistors, capacitors, inductors, LEDs, switches, DC batteries, AC sources, ground
-- A real transient engine — capacitors charge, inductors ramp, AC sources oscillate, all live
-- Bendable multi-point wires with automatic crossing "hops" so overlapping wires are never ambiguous
-- Drag any node to move it — every connected part's endpoint moves with it
-- A live oscilloscope trace (voltage or current) for whichever part is selected
-- Real reference designators (R1, C1, D1, SW1, BT1...), assigned like an actual schematic
-- Two example circuits (LED indicator, RC charging) plus a blank canvas to build your own
+Wires aren't limited to a single straight segment. You can click through a
+few points to bend one around something, and if two wires end up crossing
+on the board without actually being connected there, it draws a small hop
+so you're not left guessing whether they're wired together or just
+overlapping. You can also grab any connection point and drag it somewhere
+else - everything attached at that point follows along, since a node isn't
+really owned by one part, it's just wherever things happen to meet.
 
-## Local development
+The board is zoomable and pannable - scroll to zoom toward wherever the
+cursor is, drag on empty space to pan. Neither resets when the board is
+cleared or a different example is loaded, since the camera position isn't
+really part of the circuit, it's just where you happen to be looking.
 
-```bash
-npm install
-npm run dev
-```
+There's a small oscilloscope in the side panel. Select anything and it
+traces voltage or current over the last few seconds, so you can actually
+watch a charge curve bend or an AC waveform oscillate instead of inferring
+it from a color changing somewhere.
 
-Opens a dev server (Vite) with hot reload at `http://localhost:5173`.
+Two example circuits are built in to start from - a basic LED indicator,
+and an RC charging circuit with the switch left open so you can close it
+yourself and watch the capacitor charge in real time.
 
-## Build
-
-```bash
-npm run build
-```
-
-Outputs a static production build to `dist/`. Preview it locally with
-`npm run preview`.
-
-## Deploying to GitHub Pages
-
-This repo ships with a GitHub Actions workflow
-(`.github/workflows/deploy.yml`) that builds and deploys automatically on
-every push to `main`. One-time setup:
-
-1. Push this repo to GitHub.
-2. In the repo, go to **Settings → Pages** and set **Source** to
-   **GitHub Actions** (not "Deploy from a branch").
-3. Push to `main` (or run the workflow manually from the **Actions** tab).
-   The site will be live at `https://<your-username>.github.io/<repo-name>/`.
-
-**If you rename the repository**, update the `BASE_PATH` constant in
-`vite.config.js` to match the new repo name exactly (GitHub Pages serves
-project sites from a `/repo-name/` subpath, and Vite needs to know that at
-build time or assets will 404).
-
-## Project structure
-
-```
-index.html              Vite entry point
-src/main.jsx             Mounts the component to #root
-src/CircuitSimulator.jsx The entire simulator: solver, rendering, UI
-src/index.css            Minimal page-level layout/reset
-vite.config.js            Build config, including the GitHub Pages base path
-.github/workflows/deploy.yml   CI: build + deploy to Pages on push
-```
-
-`CircuitSimulator.jsx` is currently a single file. It's organized into clear
-sections (solver, formatting helpers, styling, component), but if you'd
-rather split it into modules (e.g. `solver.js`, `symbols.jsx`, `Scope.jsx`),
-that's a reasonable follow-up and shouldn't require touching the underlying
-logic.
+It's a single React component, rendered as SVG, built with Vite. No
+backend, nothing calling out anywhere - the whole simulation runs
+client-side, in the browser, on your machine.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT, do whatever you want with it.
