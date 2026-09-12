@@ -13,6 +13,7 @@ import {
   Trash2,
   Eraser,
   Play,
+  Maximize,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -25,6 +26,9 @@ const H = 360;
 const FIXED_DT = 0.002; // internal physics timestep (seconds of simulated time)
 const MAX_STEPS_PER_FRAME = 150; // guards against a huge catch-up burst after the tab was backgrounded
 const HISTORY_WINDOW = 4; // seconds of simulated time kept for the scope trace
+const MIN_VIEW_W = 80; // most zoomed in: 4 grid cells across
+const MAX_VIEW_W = 2400; // most zoomed out: 5x the default width
+const PAN_CLICK_THRESHOLD = 4; // screen px of movement before a background drag counts as a pan, not a click
 
 const TOOLS = [
   { type: "select", label: "Select", icon: MousePointer2 },
@@ -466,8 +470,12 @@ function flowDuration(current) {
   return Math.min(3.2, 2.4 / Math.sqrt(mag));
 }
 
-function snap(v, max) {
-  return Math.max(0, Math.min(max, Math.round(v / GRID) * GRID));
+// No longer clamped to [0,W]/[0,H] -- with pan/zoom, the visible area can
+// sit anywhere, so grid-snapping alone (no bound) is what actually makes
+// sense now. A component placed while panned out to some far corner should
+// still land on-grid, not get clamped back into the original default view.
+function snap(v) {
+  return Math.round(v / GRID) * GRID;
 }
 
 function getSvgPoint(evt, svg) {
@@ -478,6 +486,33 @@ function getSvgPoint(evt, svg) {
   if (!ctm) return { x: 0, y: 0 };
   const p = pt.matrixTransform(ctm.inverse());
   return { x: p.x, y: p.y };
+}
+
+// Pure so it's directly unit-testable without a real browser CTM: given the
+// current view rect, the cursor's circuit-space position, and the wheel
+// event's deltaY, returns the new view rect with that cursor point held at
+// the same relative position (the standard "zoom toward cursor" property).
+function zoomedView(v, cursorPt, deltaY) {
+  const factor = Math.exp(deltaY * 0.001);
+  const newW = Math.max(MIN_VIEW_W, Math.min(MAX_VIEW_W, v.w * factor));
+  const newH = newW * (H / W);
+  const fx = (cursorPt.x - v.x) / v.w;
+  const fy = (cursorPt.y - v.y) / v.h;
+  return { x: cursorPt.x - fx * newW, y: cursorPt.y - fy * newH, w: newW, h: newH };
+}
+
+// Also pure: given the view rect at drag start, how far the mouse has moved
+// in screen pixels since then, and the SVG's on-screen size, returns the
+// panned view rect. Translation only -- width/height never change here.
+function pannedView(startView, dxScreen, dyScreen, rectWidth, rectHeight) {
+  const scaleX = startView.w / rectWidth;
+  const scaleY = startView.h / rectHeight;
+  return {
+    x: startView.x - dxScreen * scaleX,
+    y: startView.y - dyScreen * scaleY,
+    w: startView.w,
+    h: startView.h,
+  };
 }
 
 /* ---------------------------------------------------------------------- */
@@ -595,6 +630,12 @@ export default function CircuitSimulator() {
   const [selectedId, setSelectedId] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
   const [dragNodeKey, setDragNodeKey] = useState(null); // key of the node currently being dragged, if any
+  // The visible rectangle in circuit-space units. Independent of `components`
+  // on purpose -- Clear and Load Example never touch this, per the "stay put"
+  // requirement, so panning/zooming is a property of the camera, not the
+  // circuit content.
+  const [view, setView] = useState({ x: 0, y: 0, w: W, h: H });
+  const panRef = useRef(null); // { startClientX, startClientY, startView, moved } while background-dragging to pan
   const [animate, setAnimate] = useState(true);
   const [running, setRunning] = useState(true);
   const [speed, setSpeed] = useState(1);
@@ -742,6 +783,38 @@ export default function CircuitSimulator() {
     return () => window.removeEventListener("mouseup", onUp);
   }, [dragNodeKey]);
 
+  // Background-drag panning uses a ref (not state) so mousemove during a
+  // pan doesn't trigger a state-subscribed effect teardown/setup on every
+  // pixel -- this listener just stays mounted and no-ops when nothing's
+  // being dragged. A plain click (no real movement) still deselects, same
+  // as before panning existed; an actual drag doesn't.
+  useEffect(() => {
+    function onUp() {
+      if (!panRef.current) return;
+      if (!panRef.current.moved) setSelectedId(null);
+      panRef.current = null;
+    }
+    window.addEventListener("mouseup", onUp);
+    return () => window.removeEventListener("mouseup", onUp);
+  }, []);
+
+  // Wheel-to-zoom, centered on the cursor. Attached as a native listener
+  // (not React's onWheel) with { passive: false } -- browsers default wheel
+  // listeners to passive for scroll performance, which silently breaks
+  // preventDefault() unless it's explicitly opted out here. Without this,
+  // scrolling to zoom the board would also scroll the page underneath it.
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    function onWheel(e) {
+      e.preventDefault();
+      const cursorPt = getSvgPoint(e, svg);
+      setView((v) => zoomedView(v, cursorPt, e.deltaY));
+    }
+    svg.addEventListener("wheel", onWheel, { passive: false });
+    return () => svg.removeEventListener("wheel", onWheel);
+  }, []);
+
   function addComponent(partial) {
     const id = `c${idRef.current++}`;
     const prefix = DESIGNATOR_PREFIX[partial.type];
@@ -781,10 +854,25 @@ export default function CircuitSimulator() {
     setPendingStart(null);
     setPendingPath(null);
   }
+  function resetView() {
+    setView({ x: 0, y: 0, w: W, h: H });
+  }
 
   function handleSvgMouseMove(e) {
+    if (panRef.current) {
+      const dxScreen = e.clientX - panRef.current.startClientX;
+      const dyScreen = e.clientY - panRef.current.startClientY;
+      if (!panRef.current.moved && Math.hypot(dxScreen, dyScreen) > PAN_CLICK_THRESHOLD) {
+        panRef.current.moved = true;
+      }
+      if (panRef.current.moved) {
+        const rect = svgRef.current.getBoundingClientRect();
+        setView(pannedView(panRef.current.startView, dxScreen, dyScreen, rect.width, rect.height));
+      }
+      return;
+    }
     const p = getSvgPoint(e, svgRef.current);
-    const snapped = { x: snap(p.x, W), y: snap(p.y, H) };
+    const snapped = { x: snap(p.x), y: snap(p.y) };
     setHoverPt(snapped);
     if (dragNodeKey) moveNode(dragNodeKey, snapped.x, snapped.y);
   }
@@ -845,7 +933,7 @@ export default function CircuitSimulator() {
 
   function handleSvgMouseDown(e) {
     const p = getSvgPoint(e, svgRef.current);
-    const snapped = { x: snap(p.x, W), y: snap(p.y, H) };
+    const snapped = { x: snap(p.x), y: snap(p.y) };
 
     if (tool === "ground") {
       addComponent({ type: "ground", x1: snapped.x, y1: snapped.y });
@@ -888,7 +976,14 @@ export default function CircuitSimulator() {
       }
       return;
     }
-    if (tool === "select") setSelectedId(null);
+    if (tool === "select") {
+      panRef.current = {
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        startView: { ...view },
+        moved: false,
+      };
+    }
   }
 
   // Only intercept the click for select/delete tools. For placement tools we
@@ -1327,6 +1422,9 @@ export default function CircuitSimulator() {
           <button className="csim-iconbtn" onClick={clearBoard}>
             <Eraser size={13} /> Clear
           </button>
+          <button className="csim-iconbtn" onClick={resetView} title="Reset pan/zoom back to the default view">
+            <Maximize size={13} /> Reset view
+          </button>
           <select className="csim-select" defaultValue="" onChange={(e) => e.target.value && loadExample(e.target.value)} title="Load an example">
             <option value="" disabled>
               Load example…
@@ -1365,13 +1463,13 @@ export default function CircuitSimulator() {
         <main className="csim-board-wrap">
           <svg
             ref={svgRef}
-            viewBox={`0 0 ${W} ${H}`}
+            viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
             className="csim-board-svg"
             onMouseMove={handleSvgMouseMove}
             onMouseDown={handleSvgMouseDown}
-            style={dragNodeKey ? { cursor: "grabbing" } : undefined}
+            style={dragNodeKey || (panRef.current && panRef.current.moved) ? { cursor: "grabbing" } : undefined}
           >
-            <rect x={0} y={0} width={W} height={H} fill="var(--canvas)" />
+            <rect x={view.x} y={view.y} width={view.w} height={view.h} fill="var(--canvas)" />
             <defs>
               <pattern id="csimGridMinor" width={GRID} height={GRID} patternUnits="userSpaceOnUse">
                 <path d={`M ${GRID} 0 L 0 0 0 ${GRID}`} fill="none" stroke="var(--grid-line)" strokeWidth={1} />
@@ -1380,13 +1478,21 @@ export default function CircuitSimulator() {
                 <path d="M 100 0 L 0 0 0 100" fill="none" stroke="var(--grid-line-major)" strokeWidth={1} />
               </pattern>
             </defs>
-            <rect x={0} y={0} width={W} height={H} fill="url(#csimGridMinor)" />
-            <rect x={0} y={0} width={W} height={H} fill="url(#csimGridMajor)" />
+            <rect x={view.x} y={view.y} width={view.w} height={view.h} fill="url(#csimGridMinor)" />
+            <rect x={view.x} y={view.y} width={view.w} height={view.h} fill="url(#csimGridMajor)" />
             <g className="csim-corner-marks" stroke="var(--border-strong)" strokeWidth={1.5} opacity={0.7} fill="none">
-              <path d={`M 14,0 L 0,0 L 0,14`} />
-              <path d={`M ${W - 14},0 L ${W},0 L ${W},14`} />
-              <path d={`M 14,${H} L 0,${H} L 0,${H - 14}`} />
-              <path d={`M ${W - 14},${H} L ${W},${H} L ${W},${H - 14}`} />
+              {(() => {
+                const inset = Math.min(view.w, view.h) * 0.03;
+                const l = view.x, t = view.y, r = view.x + view.w, b = view.y + view.h;
+                return (
+                  <>
+                    <path d={`M ${l + inset},${t} L ${l},${t} L ${l},${t + inset}`} />
+                    <path d={`M ${r - inset},${t} L ${r},${t} L ${r},${t + inset}`} />
+                    <path d={`M ${l + inset},${b} L ${l},${b} L ${l},${b - inset}`} />
+                    <path d={`M ${r - inset},${b} L ${r},${b} L ${r},${b - inset}`} />
+                  </>
+                );
+              })()}
             </g>
 
             {components.map(renderPart)}
