@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import {
   MousePointer2,
   Minus,
@@ -16,9 +16,7 @@ import {
   Maximize,
 } from "lucide-react";
 
-/* ---------------------------------------------------------------------- */
-/*  Constants                                                              */
-/* ---------------------------------------------------------------------- */
+// Constants 
 
 const GRID = 20;
 const W = 480;
@@ -97,10 +95,10 @@ const EXAMPLES = {
   },
 };
 
-/* ---------------------------------------------------------------------- */
-/*  Circuit solver — modified nodal analysis with backward-Euler           */
-/*  companion models for capacitors/inductors, run every physics tick      */
-/* ---------------------------------------------------------------------- */
+
+//  Circuit solver — modified nodal analysis with backward-Euler           
+//  companion models for capacitors/inductors, run every physics tick      
+
 
 function key(x, y) {
   return `${x},${y}`;
@@ -134,8 +132,7 @@ function solveLinear(A, b) {
 // LED companion model: a damped fixed-point iteration toward a smooth
 // (sigmoid) conductance curve as a function of the voltage across it. A hard
 // on/off resistance switch oscillates forever once it crosses the threshold
-// each pass (verified empirically) — damping the conductance update is what
-// actually converges to a stable operating point.
+// each pass damping the conductance update is what actually converges to a stable operating point.
 const LED_VF = 1.7;
 const LED_RON = 15;
 const LED_ROFF = 5e7;
@@ -150,14 +147,12 @@ function ledTargetG(v) {
   return goff + (gon - goff) * s;
 }
 
-/* ---------------------------------------------------------------------- */
-/*  Multi-point wire geometry                                              */
-/*  Wires are the only component that can bend; everything else keeps a    */
-/*  fixed 2-terminal body. componentPoints() gives a uniform view of any   */
-/*  part's path for node-collection and crossing detection. expandForSolver*/
-/*  turns a bent wire into several synthetic 2-point wire segments so the  */
-/*  solver above never has to know multi-point wires exist.                */
-/* ---------------------------------------------------------------------- */
+
+//  Multi-point wire geometry                                              
+//  Wires are the only component that can bend; everything else keeps a    
+//  expandForSolver turns a bent wire into several synthetic 2-point 
+// wire segments so the solver above never has to know multi-point wires exist.                
+
 
 function componentPoints(c) {
   if (c.type === "wire") return c.points;
@@ -189,11 +184,8 @@ function expandForSolver(components) {
   return expanded;
 }
 
-// Standard 2D segment intersection. Returns the crossing point plus how far
-// along each segment it falls (t, u in [0,1]), or null if they don't cross.
-// A crossing within EPS of either segment's own endpoint is treated as "no
-// crossing" — that's a shared node / real junction, not an ambiguous cross,
-// and junctions are already shown via the colored node dots.
+// Returns the crossing point plus how far along each segment it falls, or null if they don't cross.
+// A crossing within EPS of either segment's own endpoint is treated as "no crossing"
 const HOP_EPS = 0.02;
 function segIntersect(p1, p2, p3, p4) {
   const d1x = p2.x - p1.x,
@@ -211,12 +203,8 @@ function segIntersect(p1, p2, p3, p4) {
 }
 
 // Flattens every component into its constituent line segments, finds true
-// mid-segment crossings between segments from DIFFERENT components, and
-// decides which side of each crossing gets drawn with a hop. Rule: a wire
-// always hops over a non-wire part (never deform a resistor/LED/etc.'s
-// symbol); between two wires, the later one in iteration order hops. Only
-// wire segments ever end up as keys, since only wires render with a
-// hop-capable path.
+// mid-segment crossings between segments from different components, and
+// decides which side of each crossing gets drawn. 
 function computeHops(components) {
   const segs = [];
   components.forEach((c) => {
@@ -226,7 +214,7 @@ function computeHops(components) {
     }
   });
 
-  const hops = new Map(); // "compId:segIdx" -> [t, ...]
+  const hops = new Map();
   const addHop = (seg, t) => {
     const k = `${seg.compId}:${seg.segIdx}`;
     if (!hops.has(k)) hops.set(k, []);
@@ -237,18 +225,16 @@ function computeHops(components) {
     for (let j = i + 1; j < segs.length; j++) {
       const a = segs[i];
       const b = segs[j];
-      if (a.compId === b.compId) continue; // a wire's own consecutive segments always share an endpoint, never a true cross
+      if (a.compId === b.compId) continue;
       const hit = segIntersect(a.p1, a.p2, b.p1, b.p2);
       if (!hit) continue;
       if (a.isWire && b.isWire) {
-        addHop(b, hit.u); // later one (by iteration order) hops
+        addHop(b, hit.u);
       } else if (a.isWire) {
         addHop(a, hit.t);
       } else if (b.isWire) {
         addHop(b, hit.u);
       }
-      // neither is a wire: no good place to draw a hop without deforming a
-      // symbol, so leave both straight — a rare, unhandled edge case.
     }
   }
   hops.forEach((arr) => arr.sort((x, y) => x - y));
@@ -256,10 +242,9 @@ function computeHops(components) {
 }
 
 // Advances the circuit by one fixed timestep. Capacitors/inductors carry
-// memory (capV/indI) forward from prevState using backward-Euler companion
-// models — verified against analytical RC/RL/LC/AC solutions. Wires, closed
-// switches, and grounds are modeled as large fixed conductances rather than
-// merged nodes, so every element gets the same uniform edge treatment.
+// memory (capV/indI) forward from prevState. Wires, closed switches, and grounds
+//  are modeled as large fixed conductances rather than merged nodes, so every element
+//  gets the same uniform edge treatment.
 function stepTransient(rawComponents, prevState, t, dt) {
   if (rawComponents.length === 0) {
     return { voltages: {}, currents: {}, ledOn: {}, newState: { capV: {}, indI: {} } };
@@ -302,7 +287,7 @@ function stepTransient(rawComponents, prevState, t, dt) {
   for (let iter = 0; iter < maxIter; iter++) {
     const A = Array.from({ length: size }, () => new Array(size).fill(0));
     const b = new Array(size).fill(0);
-    for (let i = 0; i < n; i++) A[i][i] += 1e-9; // leak to reference, avoids a singular matrix for floating loops
+    for (let i = 0; i < n; i++) A[i][i] += 1e-9;
 
     components.forEach((c) => {
       let g = null;
@@ -340,8 +325,8 @@ function stepTransient(rawComponents, prevState, t, dt) {
     sources.forEach((s, si) => {
       const row = n + si;
       const val = s.type === "battery" ? s.value : s.amplitude * Math.sin(2 * Math.PI * s.freq * t);
-      const ip = nIndex(key(s.x2, s.y2)); // second click = "+"
-      const im = nIndex(key(s.x1, s.y1)); // first click = "-"
+      const ip = nIndex(key(s.x2, s.y2));
+      const im = nIndex(key(s.x1, s.y1));
       if (ip >= 0) {
         A[ip][row] += 1;
         A[row][ip] += 1;
@@ -398,9 +383,6 @@ function stepTransient(rawComponents, prevState, t, dt) {
       currents[c.id] = g * (va - vb) + iPrev;
       newIndI[c.id] = currents[c.id];
     } else if (c.type === "battery" || c.type === "acsource") {
-      // MNA's source-current unknown is defined flowing + -> - through the
-      // source; negate so the sign matches every other edge's point1->point2
-      // convention, keeping the flow-dash direction consistent around a loop.
       currents[c.id] = -(sourceCurrents[c.id] || 0);
     } else {
       currents[c.id] = 0;
@@ -409,11 +391,6 @@ function stepTransient(rawComponents, prevState, t, dt) {
 
   const ledOn = {};
   leds.forEach((c) => (ledOn[c.id] = Math.abs(currents[c.id]) > 0.001));
-
-  // The main loop above only ever populates synthetic per-segment ids
-  // (e.g. "c2#0") for wires, since it iterates the expanded list — map one
-  // representative current back onto the wire's own id for everything else
-  // (inspector, scope, flow animation) to read.
   rawComponents.forEach((c) => {
     if (c.type === "wire") {
       currents[c.id] = currents[`${c.id}#0`];
@@ -423,9 +400,8 @@ function stepTransient(rawComponents, prevState, t, dt) {
   return { voltages, currents, ledOn, newState: { capV: newCapV, indI: newIndI } };
 }
 
-/* ---------------------------------------------------------------------- */
-/*  Formatting / helpers                                                   */
-/* ---------------------------------------------------------------------- */
+// Formatting / helpers                                               
+
 
 function round2(n) {
   return Math.round(n * 100) / 100;
@@ -456,9 +432,9 @@ function fmtHz(v) {
 
 function voltageColor(v) {
   const t = Math.max(-1, Math.min(1, v / 6));
-  const NEU = [96, 96, 96]; // matches --volt-zero
-  const POS = [204, 0, 0]; // matches --volt-pos
-  const NEG = [0, 0, 204]; // matches --volt-neg
+  const NEU = [96, 96, 96]; 
+  const POS = [204, 0, 0];
+  const NEG = [0, 0, 204];
   const target = t >= 0 ? POS : NEG;
   const amt = Math.abs(t);
   const c = NEU.map((n0, i) => Math.round(n0 + (target[i] - n0) * amt));
@@ -470,10 +446,6 @@ function flowDuration(current) {
   return Math.min(3.2, 2.4 / Math.sqrt(mag));
 }
 
-// No longer clamped to [0,W]/[0,H] -- with pan/zoom, the visible area can
-// sit anywhere, so grid-snapping alone (no bound) is what actually makes
-// sense now. A component placed while panned out to some far corner should
-// still land on-grid, not get clamped back into the original default view.
 function snap(v) {
   return Math.round(v / GRID) * GRID;
 }
@@ -488,22 +460,15 @@ function getSvgPoint(evt, svg) {
   return { x: p.x, y: p.y };
 }
 
-// Pure so it's directly unit-testable without a real browser CTM: given the
-// current view rect, the cursor's circuit-space position, and the wheel
-// event's deltaY, returns the new view rect with that cursor point held at
-// the same relative position (the standard "zoom toward cursor" property).
 function zoomedView(v, cursorPt, deltaY) {
   const factor = Math.exp(deltaY * 0.001);
   const newW = Math.max(MIN_VIEW_W, Math.min(MAX_VIEW_W, v.w * factor));
-  const newH = newW * (H / W);
+  const newH = newW * (v.h / v.w); // preserve the view's OWN current aspect ratio, not a hardcoded one
   const fx = (cursorPt.x - v.x) / v.w;
   const fy = (cursorPt.y - v.y) / v.h;
   return { x: cursorPt.x - fx * newW, y: cursorPt.y - fy * newH, w: newW, h: newH };
 }
 
-// Also pure: given the view rect at drag start, how far the mouse has moved
-// in screen pixels since then, and the SVG's on-screen size, returns the
-// panned view rect. Translation only -- width/height never change here.
 function pannedView(startView, dxScreen, dyScreen, rectWidth, rectHeight) {
   const scaleX = startView.w / rectWidth;
   const scaleY = startView.h / rectHeight;
@@ -515,9 +480,17 @@ function pannedView(startView, dxScreen, dyScreen, rectWidth, rectHeight) {
   };
 }
 
-/* ---------------------------------------------------------------------- */
-/*  Styling                                                                 */
-/* ---------------------------------------------------------------------- */
+function fitView(v, containerWidth, containerHeight) {
+  if (!(containerWidth > 0) || !(containerHeight > 0)) return v;
+  const aspect = containerWidth / containerHeight;
+  const newH = v.w / aspect;
+  const cy = v.y + v.h / 2;
+  return { ...v, h: newH, y: cy - newH / 2 };
+}
+
+
+//  Styling
+
 
 const CSS = `
 :root{
@@ -614,38 +587,29 @@ const CSS = `
 @keyframes csimflow{ to{ stroke-dashoffset:-20; } }
 `;
 
-/* ---------------------------------------------------------------------- */
-/*  Component                                                               */
-/* ---------------------------------------------------------------------- */
+//  Component  
 
 export default function CircuitSimulator() {
   const svgRef = useRef(null);
+  const boardWrapRef = useRef(null); 
   const idRef = useRef(EXAMPLES.led.parts.length + 1);
   const designatorCountsRef = useRef(computeDesignatorCounts(EXAMPLES.led.parts));
   const [components, setComponents] = useState(EXAMPLES.led.parts);
   const [tool, setTool] = useState("select");
   const [pendingStart, setPendingStart] = useState(null);
-  const [pendingPath, setPendingPath] = useState(null); // array of {x,y} while actively drawing a multi-point wire
+  const [pendingPath, setPendingPath] = useState(null); 
   const [hoverPt, setHoverPt] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
-  const [dragNodeKey, setDragNodeKey] = useState(null); // key of the node currently being dragged, if any
-  // The visible rectangle in circuit-space units. Independent of `components`
-  // on purpose -- Clear and Load Example never touch this, per the "stay put"
-  // requirement, so panning/zooming is a property of the camera, not the
-  // circuit content.
+  const [dragNodeKey, setDragNodeKey] = useState(null); 
   const [view, setView] = useState({ x: 0, y: 0, w: W, h: H });
-  const panRef = useRef(null); // { startClientX, startClientY, startView, moved } while background-dragging to pan
+  const panRef = useRef(null); 
   const [animate, setAnimate] = useState(true);
   const [running, setRunning] = useState(true);
   const [speed, setSpeed] = useState(1);
   const [snapshot, setSnapshot] = useState({ voltages: {}, currents: {}, ledOn: {} });
   const [clock, setClock] = useState(0);
   const [scopeMode, setScopeMode] = useState("v");
-
-  // Refs that back the physics loop. Kept out of React state so the
-  // animation frame doesn't fight React's render cycle; `snapshot` is the
-  // only thing that actually triggers a re-render, once per frame.
   const componentsRef = useRef(components);
   componentsRef.current = components;
   const selectedIdRef = useRef(selectedId);
@@ -655,13 +619,9 @@ export default function CircuitSimulator() {
   const accumulatorRef = useRef(0);
   const lastFrameRef = useRef(null);
   const rafRef = useRef(null);
-  const historyRef = useRef([]); // [{t, v, i}] for whichever part is selected, trailing HISTORY_WINDOW seconds
-
+  const historyRef = useRef([]); 
   const selected = components.find((c) => c.id === selectedId) || null;
 
-  // Records one scope sample per rendered frame (not per physics substep —
-  // at 5x speed a frame can contain 100+ substeps, which would flood the
-  // buffer with far more resolution than the chart can show anyway).
   function recordHistory(comps, result) {
     const selId = selectedIdRef.current;
     if (!selId) return;
@@ -694,24 +654,17 @@ export default function CircuitSimulator() {
   }
 
   // Any edit to the circuit takes one immediate physics step so the display
-  // updates right away, whether or not the clock is currently running. Also
-  // supplies the very first snapshot on mount.
+  // updates right away, whether or not the clock is currently running. 
   useEffect(() => {
     const result = stepPhysics(components);
     recordHistory(components, result);
     setSnapshot(result);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [components]);
 
-  // Starting a fresh trace whenever the selection changes, rather than
-  // showing a graph that jumps between unrelated parts' old data.
   useEffect(() => {
     historyRef.current = [];
   }, [selectedId]);
 
-  // The continuous simulation clock. Uses componentsRef (not the `components`
-  // state) so this effect only restarts on running/speed changes, not on
-  // every board edit.
   useEffect(() => {
     if (!running) {
       lastFrameRef.current = null;
@@ -746,7 +699,6 @@ export default function CircuitSimulator() {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       lastFrameRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, speed]);
 
   useEffect(() => {
@@ -770,12 +722,8 @@ export default function CircuitSimulator() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, pendingPath]);
 
-  // A window-level listener (not just onMouseUp on the SVG) so a drag still
-  // ends cleanly even if the mouse is released outside the board — a very
-  // common way for a plain element-local handler to leave a drag "stuck".
   useEffect(() => {
     if (!dragNodeKey) return;
     const onUp = () => setDragNodeKey(null);
@@ -783,11 +731,6 @@ export default function CircuitSimulator() {
     return () => window.removeEventListener("mouseup", onUp);
   }, [dragNodeKey]);
 
-  // Background-drag panning uses a ref (not state) so mousemove during a
-  // pan doesn't trigger a state-subscribed effect teardown/setup on every
-  // pixel -- this listener just stays mounted and no-ops when nothing's
-  // being dragged. A plain click (no real movement) still deselects, same
-  // as before panning existed; an actual drag doesn't.
   useEffect(() => {
     function onUp() {
       if (!panRef.current) return;
@@ -798,11 +741,19 @@ export default function CircuitSimulator() {
     return () => window.removeEventListener("mouseup", onUp);
   }, []);
 
-  // Wheel-to-zoom, centered on the cursor. Attached as a native listener
-  // (not React's onWheel) with { passive: false } -- browsers default wheel
-  // listeners to passive for scroll performance, which silently breaks
-  // preventDefault() unless it's explicitly opted out here. Without this,
-  // scrolling to zoom the board would also scroll the page underneath it.
+  useLayoutEffect(() => {
+    const el = boardWrapRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      setView((v) => fitView(v, width, height));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg) return;
@@ -820,10 +771,10 @@ export default function CircuitSimulator() {
     const prefix = DESIGNATOR_PREFIX[partial.type];
     const designator = prefix
       ? (() => {
-          const n = (designatorCountsRef.current[partial.type] || 0) + 1;
-          designatorCountsRef.current[partial.type] = n;
-          return `${prefix}${n}`;
-        })()
+        const n = (designatorCountsRef.current[partial.type] || 0) + 1;
+        designatorCountsRef.current[partial.type] = n;
+        return `${prefix}${n}`;
+      })()
       : undefined;
     setComponents((prev) => [...prev, { ...partial, id, ...(designator ? { designator } : {}) }]);
   }
@@ -855,7 +806,10 @@ export default function CircuitSimulator() {
     setPendingPath(null);
   }
   function resetView() {
-    setView({ x: 0, y: 0, w: W, h: H });
+    setView((v) => {
+      const aspect = v.w / v.h;
+      return { x: 0, y: 0, w: W, h: W / aspect };
+    });
   }
 
   function handleSvgMouseMove(e) {
@@ -877,10 +831,6 @@ export default function CircuitSimulator() {
     if (dragNodeKey) moveNode(dragNodeKey, snapped.x, snapped.y);
   }
 
-  // Moving a node means moving every endpoint (across every component, wire
-  // waypoints included) that shares its exact coordinate — a node isn't
-  // owned by one part, it's the shared electrical connection between
-  // whatever happens to sit at that point.
   function moveNode(fromKey, toX, toY) {
     const toKey = key(toX, toY);
     if (fromKey === toKey) return;
@@ -921,9 +871,6 @@ export default function CircuitSimulator() {
     setDragNodeKey(key(p.x, p.y));
   }
 
-  // Commits the in-progress wire path (2+ points) as one component, or
-  // silently discards it if it never got past a single point. Always clears
-  // the in-progress state either way.
   function commitPendingWire(path) {
     if (path && path.length >= 2) {
       addComponent({ type: "wire", points: path });
@@ -946,7 +893,6 @@ export default function CircuitSimulator() {
       } else {
         const last = pendingPath[pendingPath.length - 1];
         if (snapped.x === last.x && snapped.y === last.y) {
-          // clicking the current end point again finishes the wire there
           commitPendingWire(pendingPath);
         } else {
           setPendingPath([...pendingPath, snapped]);
@@ -986,9 +932,6 @@ export default function CircuitSimulator() {
     }
   }
 
-  // Only intercept the click for select/delete tools. For placement tools we
-  // deliberately let the mousedown bubble up to the board so a new part can
-  // be started or finished exactly on top of an existing node.
   function handlePartMouseDown(e, comp) {
     if (tool === "delete") {
       e.stopPropagation();
@@ -1022,13 +965,9 @@ export default function CircuitSimulator() {
     const va = snapshot.voltages[key(p0.x, p0.y)] ?? 0;
     const vb = snapshot.voltages[key(pN.x, pN.y)] ?? 0;
     const col = voltageColor((va + vb) / 2);
-
     const showFlow = animate && Math.abs(current) > 0.00005;
     const dur = flowDuration(current);
     const dir = current >= 0 ? "normal" : "reverse";
-
-    // Build the path, inserting a small detour wherever this wire's segments
-    // were flagged as crossing something else without actually connecting.
     const HOP_R = 4.5;
     const HOP_BULGE = 6;
     let d = `M ${pts[0].x},${pts[0].y}`;
@@ -1261,22 +1200,22 @@ export default function CircuitSimulator() {
       c.type === "resistor"
         ? fmtR(c.value)
         : c.type === "capacitor"
-        ? fmtC(c.value)
-        : c.type === "inductor"
-        ? fmtL(c.value)
-        : c.type === "battery"
-        ? c.value + " V"
-        : c.type === "acsource"
-        ? c.amplitude + " Vpk @ " + fmtHz(c.freq)
-        : c.type === "switch"
-        ? c.closed
-          ? "Closed"
-          : "Open"
-        : c.type === "led"
-        ? snapshot.ledOn[c.id]
-          ? "On"
-          : "Off"
-        : "";
+          ? fmtC(c.value)
+          : c.type === "inductor"
+            ? fmtL(c.value)
+            : c.type === "battery"
+              ? c.value + " V"
+              : c.type === "acsource"
+                ? c.amplitude + " Vpk @ " + fmtHz(c.freq)
+                : c.type === "switch"
+                  ? c.closed
+                    ? "Closed"
+                    : "Open"
+                  : c.type === "led"
+                    ? snapshot.ledOn[c.id]
+                      ? "On"
+                      : "Off"
+                    : "";
 
     return (
       <g key={c.id} transform={`translate(${midx} ${midy}) rotate(${angle})`}>
@@ -1460,7 +1399,7 @@ export default function CircuitSimulator() {
       </div>
 
       <div className="csim-body">
-        <main className="csim-board-wrap">
+        <main className="csim-board-wrap" ref={boardWrapRef}>
           <svg
             ref={svgRef}
             viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
@@ -1750,16 +1689,16 @@ export default function CircuitSimulator() {
           {pendingPath
             ? "Click to add a bend; click the last point again (or press Enter) to finish \u2014 Esc to cancel."
             : pendingStart
-            ? "Click the second point to finish placing \u2014 Esc to cancel."
-            : tool === "select"
-            ? "Click a part to inspect or edit it; drag a node to move it; click a switch to toggle it."
-            : tool === "delete"
-            ? "Click a part to remove it."
-            : tool === "ground"
-            ? "Click a grid point to place ground."
-            : tool === "wire"
-            ? "Click a grid point to start a wire."
-            : "Click a grid point to start, then click again to finish."}
+              ? "Click the second point to finish placing \u2014 Esc to cancel."
+              : tool === "select"
+                ? "Click a part to inspect or edit it; drag a node to move it; click a switch to toggle it."
+                : tool === "delete"
+                  ? "Click a part to remove it."
+                  : tool === "ground"
+                    ? "Click a grid point to place ground."
+                    : tool === "wire"
+                      ? "Click a grid point to start a wire."
+                      : "Click a grid point to start, then click again to finish."}
         </span>
         <span className="csim-statusbar-right">
           <span>grid {GRID}px</span>
