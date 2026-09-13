@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import "./CircuitSimulator.css";
 import {
   MousePointer2,
   Minus,
@@ -487,105 +488,6 @@ function fitView(v, containerWidth, containerHeight) {
   const cy = v.y + v.h / 2;
   return { ...v, h: newH, y: cy - newH / 2 };
 }
-
-
-//  Styling
-
-
-const CSS = `
-:root{
-  --face:#C0C0C0; --face-light:#FFFFFF; --face-shadow:#808080; --face-dark:#404040;
-  --canvas:#FFFFFF; --readout:#FFFFFF; --ink:#000000;
-  --text:#000000; --text-muted:#404040; --text-dim:#808080;
-  --accent:#000080; --accent-text:#FFFFFF; --danger:#CC0000;
-  --flow:#008A00;
-  --volt-pos:#CC0000; --volt-neg:#0000CC; --volt-zero:#606060;
-  --grid-line:#E0E0E0; --grid-line-major:#BFBFBF;
-  --font-ui:Tahoma,"MS Sans Serif",Arial,Helvetica,sans-serif;
-  --font-mono:"Courier New",Consolas,monospace;
-}
-.csim-shell{ width:100%; height:100%; min-height:700px; background:var(--face); color:var(--text);
-  font-family:var(--font-ui); display:flex; flex-direction:column; border-radius:0; overflow:hidden;
-  border:1px solid var(--face-dark); }
-.csim-header{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:6px 10px;
-  background:var(--face); border-bottom:1px solid var(--face-dark); flex-shrink:0; flex-wrap:wrap; }
-.csim-brand{ display:flex; align-items:baseline; gap:7px; }
-.csim-mark{ color:var(--accent); font-size:14px; line-height:1; }
-.csim-title{ font-size:12px; font-weight:700; color:var(--text); }
-.csim-subtitle{ font-size:11px; color:var(--text-muted); }
-.csim-actions{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-.csim-flow-toggle{ display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text);
-  cursor:pointer; user-select:none; padding:0 4px; }
-.csim-flow-toggle input{ accent-color:var(--accent); width:13px; height:13px; }
-.csim-iconbtn{ display:flex; align-items:center; gap:5px; padding:4px 9px; background:var(--face);
-  border-width:2px; border-style:solid; border-color:var(--face-light) var(--face-dark) var(--face-dark) var(--face-light);
-  color:var(--text); font-size:11px; cursor:pointer; font-family:var(--font-ui); }
-.csim-iconbtn:active{ border-color:var(--face-dark) var(--face-light) var(--face-light) var(--face-dark); }
-.csim-iconbtn.run{ background:var(--accent); color:var(--accent-text);
-  border-color:var(--face-light) var(--face-dark) var(--face-dark) var(--face-light); }
-.csim-select{ background:#fff; border-width:2px; border-style:solid;
-  border-color:var(--face-dark) var(--face-light) var(--face-light) var(--face-dark);
-  padding:4px 6px; color:var(--text); font-size:11px; font-family:var(--font-ui); cursor:pointer; }
-.csim-toolstrip{ display:flex; flex-direction:row; align-items:stretch; gap:3px; padding:3px 8px;
-  background:var(--face); border-bottom:1px solid var(--face-dark); flex-wrap:wrap; flex-shrink:0; }
-.csim-tool{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
-  padding:5px 9px 4px; min-width:48px; background:var(--face);
-  border-width:2px; border-style:solid; border-color:var(--face-light) var(--face-dark) var(--face-dark) var(--face-light);
-  color:var(--text); cursor:pointer; }
-.csim-tool span{ font-size:9px; font-family:var(--font-ui); }
-.csim-tool:hover{ background:#D8D8D8; }
-.csim-tool.active{ background:var(--accent); color:var(--accent-text);
-  border-color:var(--face-dark) var(--face-light) var(--face-light) var(--face-dark); }
-.csim-body{ display:flex; flex:1; min-height:0; }
-.csim-board-wrap{ flex:1; position:relative; background:var(--canvas); overflow:hidden; min-width:0;
-  border-width:2px; border-style:solid; border-color:var(--face-dark) var(--face-light) var(--face-light) var(--face-dark);
-  margin:2px; }
-.csim-board-svg{ width:100%; height:100%; display:block; cursor:crosshair; }
-.csim-statusbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:3px 10px;
-  background:var(--face); border-top:1px solid var(--face-dark); flex-shrink:0; font-size:10.5px;
-  color:var(--text); font-family:var(--font-mono); }
-.csim-statusbar-right{ display:flex; align-items:center; gap:14px; white-space:nowrap; }
-.csim-inspector{ width:228px; background:var(--face); border-left:1px solid var(--face-dark); padding:10px;
-  overflow-y:auto; display:flex; flex-direction:column; gap:12px; flex-shrink:0; }
-.csim-panel-title{ font-size:11px; color:var(--text); font-family:var(--font-ui); font-weight:700; }
-.csim-readout{ background:#fff; border-width:2px; border-style:solid;
-  border-color:var(--face-dark) var(--face-light) var(--face-light) var(--face-dark); padding:8px 10px; }
-.csim-readout-row{ display:flex; justify-content:space-between; align-items:baseline; padding:2px 0; }
-.csim-readout-label{ font-size:10px; color:var(--text-muted); }
-.csim-readout-value{ font-size:14px; color:var(--text); font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
-.csim-field{ display:flex; flex-direction:column; gap:3px; }
-.csim-field label{ font-size:10px; color:var(--text); }
-.csim-field input[type=number]{ background:#fff; border-width:2px; border-style:solid;
-  border-color:var(--face-dark) var(--face-light) var(--face-light) var(--face-dark);
-  padding:5px 7px; color:var(--text); font-family:var(--font-mono); font-size:13px; width:100%; box-sizing:border-box; }
-.csim-field input[type=number]:focus{ outline:1px dotted var(--text); outline-offset:1px; }
-.csim-btn{ display:flex; align-items:center; justify-content:center; gap:6px; padding:6px 12px;
-  font-size:11px; cursor:pointer; background:var(--face); color:var(--text); font-family:var(--font-ui);
-  border-width:2px; border-style:solid; border-color:var(--face-light) var(--face-dark) var(--face-dark) var(--face-light); }
-.csim-btn:active{ border-color:var(--face-dark) var(--face-light) var(--face-light) var(--face-dark); }
-.csim-btn.danger:hover{ background:var(--danger); color:#fff; }
-.csim-legend-item{ display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text); padding:2px 0; }
-.csim-legend-swatch{ width:18px; height:3px; flex-shrink:0; }
-.csim-scope-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
-.csim-scope-tabs{ display:flex; gap:3px; }
-.csim-scope-tab{ padding:2px 7px; font-size:9px; background:var(--face); color:var(--text); cursor:pointer;
-  font-family:var(--font-mono); border-width:2px; border-style:solid;
-  border-color:var(--face-light) var(--face-dark) var(--face-dark) var(--face-light); }
-.csim-scope-tab.active{ background:var(--accent); color:var(--accent-text);
-  border-color:var(--face-dark) var(--face-light) var(--face-light) var(--face-dark); }
-.csim-scope{ position:relative; overflow:hidden; height:66px; background:#fff;
-  border-width:2px; border-style:solid; border-color:var(--face-dark) var(--face-light) var(--face-light) var(--face-dark); }
-.csim-scope-svg{ width:100%; height:100%; display:block; }
-.csim-scope-label{ position:absolute; right:4px; font-size:9px; font-family:var(--font-mono); color:var(--text-muted);
-  pointer-events:none; }
-.csim-scope-label.top{ top:2px; }
-.csim-scope-label.bottom{ bottom:2px; }
-.csim-scope-empty{ height:66px; display:flex; align-items:center; justify-content:center; background:#fff;
-  color:var(--text-dim); font-size:11px; font-family:var(--font-mono);
-  border-width:2px; border-style:solid; border-color:var(--face-dark) var(--face-light) var(--face-light) var(--face-dark); }
-.flow-dash{ animation-name:csimflow; animation-timing-function:linear; animation-iteration-count:infinite; }
-@keyframes csimflow{ to{ stroke-dashoffset:-20; } }
-`;
 
 //  Component  
 
@@ -1334,8 +1236,6 @@ export default function CircuitSimulator() {
 
   return (
     <div className="csim-shell">
-      <style>{CSS}</style>
-
       <header className="csim-header">
         <div className="csim-brand">
           <span className="csim-mark">&#9107;</span>

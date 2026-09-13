@@ -1,45 +1,38 @@
-# circuit-simulator
+# Circuit Simulator
 
-I built this because I wanted a circuit simulator that actually felt alive
-instead of just spitting out a static answer. Most simple simulators solve
-a circuit once and show you the result - a voltage, a current, done. This
-one keeps solving, a couple thousand times a second, so a capacitor
-actually charges up in front of you, an inductor's current actually ramps,
-an AC source actually oscillates. It's the same underlying math, modified
-nodal analysis with backward-Euler models for the capacitors and inductors,
-just run continuously instead of once.
+A real-time, browser-based circuit simulator built with React and SVG. Wire up resistors, capacitors, inductors, LEDs, switches, and sources on a grid, and watch the circuit solve continuously — capacitors actually charge, inductors actually ramp, AC sources actually oscillate — instead of computing a single static answer.
 
-The parts are resistors, capacitors, inductors, LEDs, switches, DC
-batteries, AC sources, and ground. You wire them together on a grid, and
-it's solving the whole thing live the entire time you're building it, not
-just when you hit some "run" button.
+## Why This Exists
 
-Wires aren't limited to a single straight segment. You can click through a
-few points to bend one around something, and if two wires end up crossing
-on the board without actually being connected there, it draws a small hop
-so you're not left guessing whether they're wired together or just
-overlapping. You can also grab any connection point and drag it somewhere
-else - everything attached at that point follows along, since a node isn't
-really owned by one part, it's just wherever things happen to meet.
+Most simple circuit simulators solve a circuit once and display the result: a voltage, a current, done. This one re-solves the whole circuit a couple thousand times a second, so state actually evolves in front of you rather than being inferred from a single snapshot. It's the same underlying math — modified nodal analysis with backward-Euler discretization for reactive components — just run continuously instead of once per interaction.
 
-The board is zoomable and pannable - scroll to zoom toward wherever the
-cursor is, drag on empty space to pan. Neither resets when the board is
-cleared or a different example is loaded, since the camera position isn't
-really part of the circuit, it's just where you happen to be looking.
+## Features
 
-There's a small oscilloscope in the side panel. Select anything and it
-traces voltage or current over the last few seconds, so you can actually
-watch a charge curve bend or an AC waveform oscillate instead of inferring
-it from a color changing somewhere.
+- **Live simulation** — the circuit is re-solved continuously while you build, not on a "run" button press
+- **Component library** — resistors, capacitors, inductors, LEDs, switches, DC batteries, AC sources, and ground
+- **Multi-point wires** — click through several points to route a wire around other elements
+- **Automatic crossover hops** — wires that cross without connecting are drawn with a visual hop, so overlap is never ambiguous with a real junction
+- **Draggable nodes** — grab any connection point and everything wired to it moves with it, since a node belongs to the circuit, not to one part
+- **Pan & zoom** — scroll to zoom toward the cursor, drag empty space to pan; camera state persists across board clears and example loads
+- **Built-in oscilloscope** — select any node or component and trace its voltage or current over the last few seconds of simulated time
+- **Example circuits** — a basic LED indicator and an RC charging circuit (switch left open, so you can close it and watch the capacitor charge live)
 
-Two example circuits are built in to start from - a basic LED indicator,
-and an RC charging circuit with the switch left open so you can close it
-yourself and watch the capacitor charge in real time.
+## How It Works
 
-It's a single React component, rendered as SVG, built with Vite. No
-backend, nothing calling out anywhere - the whole simulation runs
-client-side, in the browser, on your machine.
+The simulator formulates the circuit as a modified nodal analysis (MNA) system at every timestep. Capacitors and inductors are replaced with their backward-Euler companion models (a resistor plus a history-dependent current or voltage source), so the system stays a linear solve at each step even though the overall behavior is transient. The result is integrated forward at a fixed internal timestep, decoupled from the render's frame rate, with a step-count cap per frame so a backgrounded tab doesn't trigger a large catch-up burst on return.
 
-## License
+## Getting Started
 
-MIT, do whatever you want with it.
+```bash
+# install dependencies
+npm install
+
+# start the dev server
+npm run dev
+
+# build for production
+npm run build
+```
+
+## [Live Demo] (https://yankai-zeng.github.io/circuit-simulator/)
+
