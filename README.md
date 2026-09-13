@@ -34,5 +34,5 @@ npm run dev
 npm run build
 ```
 
-## [Live Demo] (https://yankai-zeng.github.io/circuit-simulator/)
+## [Live Demo](https://yankai-zeng.github.io/circuit-simulator/)
 
